@@ -13,7 +13,7 @@ Simple CLI chat loop with an Microsoft Foundry Project agent.
 - Node.js >= 18
 - Azure identity available locally (DefaultAzureCredential will use login / environment)
 
-Set environment variables in [.env](.env):
+Set environment variables in `.env` like [.env.example](.env.example):
 ```
 PROJECT_ENDPOINT=...        # Your project endpoint
 AGENT_NAME=...              # Agent name
