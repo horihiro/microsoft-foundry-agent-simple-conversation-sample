@@ -12,7 +12,8 @@ const rl = readline.createInterface({ input, output });
 const projectEndpoint = process.env.PROJECT_ENDPOINT || "";
 const conversationId = process.env.CONVERSATION_ID || "";
 const agentName = process.env.AGENT_NAME || "";
-const isStream = process.env.STREAM_RESPONSE === "true";
+const isStream = process.env.ENABLE_STREAM_RESPONSE === "true";
+const enableMcpToolAutoApproval = process.env.ENABLE_MCPTOOL_AUTO_APPROVAL === "true";
 
 async function main(): Promise<void> {
   const credential = new DefaultAzureCredential();
@@ -32,7 +33,9 @@ async function main(): Promise<void> {
         console.log(`  - Server: ${tool.server_label}`);
         console.log(`    Tool: ${tool.name}`);
       }
-      const approvalInput = await rl.question("\n  Do you approve the use of these tools? [Y/n]: ");
+      enableMcpToolAutoApproval && console.log("  Auto-approving tools as per configuration.");
+      const approvalInput = enableMcpToolAutoApproval ? "y" : await rl.question("\n  Do you approve the use of these tools? [Y/n]: ");
+
       const isApproved = ['yes', 'y', ''].includes(approvalInput.trim().toLowerCase());
       input = approvalRequestedTools.map(tool => ({
         type: "mcp_approval_response",
@@ -40,7 +43,7 @@ async function main(): Promise<void> {
         approve: isApproved,
       }));
     } else {
-      input = await rl.question("[You]: ");
+      input = await rl.question("\n[You]: ");
     }
     if (typeof input === "string" && input.trim() === "") continue;
     response = await openAIClient.responses.create(
