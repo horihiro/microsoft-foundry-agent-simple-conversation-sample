@@ -23,9 +23,26 @@ async function main(): Promise<void> {
   const conversation = conversationId ? await openAIClient.conversations.retrieve(conversationId) : await openAIClient.conversations.create();
 
   let response: OpenAI.Responses.Response | Stream<OpenAI.Responses.ResponseStreamEvent> | undefined = undefined;
+  const approvalRequestedTools: OpenAI.Responses.ResponseOutputItem.McpApprovalRequest[] = [];
   while (true) {
-    const input = await rl.question("[You]: ");
-    if (input.trim() === "") continue;
+    let input: string | OpenAI.Responses.ResponseInputItem.McpApprovalResponse[];
+    if (approvalRequestedTools.length > 0) {
+      console.log("[System] The agent is requesting approval for the following tools:");
+      for (const tool of approvalRequestedTools) {
+        console.log(`  - Server: ${tool.server_label}`);
+        console.log(`    Tool: ${tool.name}`);
+      }
+      const approvalInput = await rl.question("\n  Do you approve the use of these tools? [Y/n]: ");
+      const isApproved = ['yes', 'y', ''].includes(approvalInput.trim().toLowerCase());
+      input = approvalRequestedTools.map(tool => ({
+        type: "mcp_approval_response",
+        approval_request_id: tool.id,
+        approve: isApproved,
+      }));
+    } else {
+      input = await rl.question("[You]: ");
+    }
+    if (typeof input === "string" && input.trim() === "") continue;
     response = await openAIClient.responses.create(
       {
         conversation: response && 'id' in response && !isStream ? undefined : conversation.id,
@@ -38,22 +55,30 @@ async function main(): Promise<void> {
       },
     );
     if (isStream && response instanceof Stream) {
+      let isFirstChunk = true;
       for await (const event of response) {
         // Handle different event types
+        // console.debug(event.type);
         if (event.type === "response.created") {
-          process.stdout.write(`[${agent.name}]: `);
         } else if (event.type === "response.output_text.delta") {
           // Print delta text as it arrives (without newlines to show streaming effect)
+          if (isFirstChunk) {
+            process.stdout.write(`[${agent.name}]: `);
+            isFirstChunk = false;
+          }
           process.stdout.write(event.delta);
         } else if (event.type === "response.output_text.done") {
           // console.log(`\n\nResponse done with full text: ${event.text}`);
         } else if (event.type === "response.completed") {
-          // console.log(`Response completed with full message: ${event.response.output_text}`);
-          process.stdout.write("\n");
+          // console.log(`${event.response.output.filter(o => o.type === 'message').map(o => o.content.filter(c => c.type === 'output_text').map(c => c.text).join('')).join('')}`);
+          approvalRequestedTools.length = 0; // Clear previous requests
+          approvalRequestedTools.push(...event.response.output.filter(o => o.type === 'mcp_approval_request'));
         }
       }
     } else if (!isStream && response && 'output_text' in response) {
-      console.log(`[${agent.name}]: ${response.output_text}`);
+      response.output_text && console.log(`[${agent.name}]: ${response.output_text}`);
+      approvalRequestedTools.length = 0; // Clear previous requests
+      approvalRequestedTools.push(...response.output.filter(o => o.type === 'mcp_approval_request'));
     }
   }
 }
