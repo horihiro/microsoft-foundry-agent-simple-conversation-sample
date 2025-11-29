@@ -12,6 +12,8 @@ Simple CLI chat loop with an Microsoft Foundry Project agent.
 ## Prerequisites
 - Node.js >= 18
 - Azure identity available locally (DefaultAzureCredential will use login / environment)
+- Microsoft Foundry project resource and AI Agent  
+  See [the official documentation](https://learn.microsoft.com/azure/ai-foundry/quickstarts/get-started-code?view=foundry&tabs=python%2Cportal)
 
 Set environment variables in `.env` like [.env.example](.env.example):
 ```
