@@ -16,8 +16,7 @@
       "outFiles": [
         "${workspaceFolder}${pathSeparator}dist${pathSeparator}**${pathSeparator}*.js"
       ],
-      "console": "integratedTerminal",
-      "envFile": "${workspaceFolder}${pathSeparator}.env"
+      "console": "integratedTerminal"
     }
   ]
 }
