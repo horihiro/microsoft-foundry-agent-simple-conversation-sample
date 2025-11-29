@@ -1,6 +1,6 @@
 # foundry-agent-ts
 
-Simple CLI chat loop with an Azure AI Project agent.
+Simple CLI chat loop with an Microsoft Foundry Project agent.
 
 ## Files
 - Main entry: [src/index.ts](src/index.ts)
