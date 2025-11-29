@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "typescript",
+      "tsconfig": "tsconfig.json",
+      "problemMatcher": ["$tsc"],
+      "group": {"build": true
+      },
+      "dependsOn": [
+        "npm: clean"
+      ],
+      "label": "tsc: build - tsconfig.json"
+    }, {
+      "type": "shell",
+      "label": "npm: clean", 
+      "command": "npm run clean"
+    }
+  ]
+}
