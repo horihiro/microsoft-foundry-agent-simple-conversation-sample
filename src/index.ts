@@ -1,6 +1,6 @@
 import { DefaultAzureCredential } from "@azure/identity";
 import { AIProjectClient } from "@azure/ai-projects";
-import { stdin as input, stdout as output } from 'node:process';
+import { stdin as input, stderr as output } from 'node:process';
 import OpenAI from "openai";
 import { Stream } from "openai/core/streaming";
 import readline from 'readline/promises';
@@ -25,15 +25,16 @@ async function main(): Promise<void> {
 
   let response: OpenAI.Responses.Response | Stream<OpenAI.Responses.ResponseStreamEvent> | undefined = undefined;
   const approvalRequestedTools: OpenAI.Responses.ResponseOutputItem.McpApprovalRequest[] = [];
+  console.warn("You can start chatting with the agent now.");
   while (true) {
     let input: string | OpenAI.Responses.ResponseInputItem.McpApprovalResponse[];
     if (approvalRequestedTools.length > 0) {
-      console.log("[System] The agent is requesting approval for the following tools:");
+      console.warn("The agent is requesting approval for the following tools:");
       for (const tool of approvalRequestedTools) {
-        console.log(`  - Server: ${tool.server_label}`);
-        console.log(`    Tool: ${tool.name}`);
+        console.warn(`  - Server: ${tool.server_label}`);
+        console.warn(`    Tool: ${tool.name}`);
       }
-      enableMcpToolAutoApproval && console.log("  Auto-approving tools as per configuration.");
+      enableMcpToolAutoApproval && console.warn("  Auto-approving tools as per configuration.");
       const approvalInput = enableMcpToolAutoApproval ? "y" : await rl.question("\n  Do you approve the use of these tools? [Y/n]: ");
 
       const isApproved = ['yes', 'y', ''].includes(approvalInput.trim().toLowerCase());
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
         } else if (event.type === "response.output_text.delta") {
           // Print delta text as it arrives (without newlines to show streaming effect)
           if (isFirstChunk) {
-            process.stdout.write(`[${agent.name}]: `);
+            process.stderr.write(`[${agent.name}]: `);
             isFirstChunk = false;
           }
           process.stdout.write(event.delta);
