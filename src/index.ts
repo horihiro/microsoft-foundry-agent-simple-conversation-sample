@@ -16,6 +16,25 @@ const agentName = process.env.AGENT_NAME || "";
 const isStream = process.env.ENABLE_STREAM_RESPONSE === "true";
 const enableMcpToolAutoApproval = process.env.ENABLE_MCPTOOL_AUTO_APPROVAL === "true";
 
+const streamResponse = async (
+  openAIClient: OpenAI,
+  options: {
+    body: ResponseCreateParamsStreaming;
+    extraBody: { body: { agent: { name: string; type: string; } } };
+    onEvent?: (event: OpenAI.Responses.ResponseStreamEvent) => void;
+  }
+): Promise<OpenAI.Responses.Response> => {
+  const stream: Stream<OpenAI.Responses.ResponseStreamEvent> = await openAIClient.responses.create(options.body, options.extraBody);
+
+  let response: OpenAI.Responses.Response | undefined = undefined;
+  for await (const event of stream) {
+    options.onEvent && options.onEvent(event);
+    if (event.type === "response.completed") response = event.response;
+  }
+  if (response) return Promise.resolve(response);
+  throw new Error("Stream ended without receiving a 'response.completed' event.");
+};
+
 async function main(): Promise<void> {
   const credential = new DefaultAzureCredential();
   const projectClient = new AIProjectClient(projectEndpoint, credential);
@@ -25,12 +44,12 @@ async function main(): Promise<void> {
   const conversation = conversationId ? await openAIClient.conversations.retrieve(conversationId) : await openAIClient.conversations.create();
 
   const extraBody = {
-    body: { agent: { name: agent.name, type: "agent_reference" } },
+    body: { agent: { name: agent.name, type: 'agent_reference' } },
   }
 
   let response: OpenAI.Responses.Response | undefined = undefined;
   const approvalRequestedTools: OpenAI.Responses.ResponseOutputItem.McpApprovalRequest[] = [];
-  console.warn("You can start chatting with the agent now.");
+  console.warn("You can start chatting with the agent now.\n");
   while (true) {
     let input: string | ResponseInput;
     if (approvalRequestedTools.length > 0) {
@@ -49,33 +68,11 @@ async function main(): Promise<void> {
         approve: isApproved,
       })) as ResponseInput;
     } else {
-      input = await rl.question("\n[You]: ");
+      input = await rl.question("[You]: ");
     }
     if (typeof input === "string" && input.trim() === "") continue;
 
-    const streamResponse = async (body: ResponseCreateParamsStreaming): Promise<OpenAI.Responses.Response> => {
-      const stream: Stream<OpenAI.Responses.ResponseStreamEvent> = await openAIClient.responses.create(body, extraBody);
-      let isFirstChunk = true;
 
-      for await (const event of stream) {
-        // Handle different event types
-        // console.debug(event.type);
-        if (event.type === "response.created") {
-        } else if (event.type === "response.output_text.delta") {
-          // Print delta text as it arrives (without newlines to show streaming effect)
-          if (isFirstChunk) {
-            process.stderr.write(`[${agent.name}]: `);
-            isFirstChunk = false;
-          }
-          process.stdout.write(event.delta);
-        } else if (event.type === "response.output_text.done") {
-          // console.log(`\n\nResponse done with full text: ${event.text}`);
-        } else if (event.type === "response.completed") {
-          return event.response;
-        }
-      }
-      throw new Error("Stream ended without receiving a 'response.completed' event.");
-    };
 
     const body: ResponseCreateParamsBase = {
       conversation: response ? undefined : conversation.id,
@@ -83,11 +80,41 @@ async function main(): Promise<void> {
       previous_response_id: response ? response.id : undefined,
       stream: isStream,
     };
-    response = isStream
-      ? await streamResponse(body as ResponseCreateParamsStreaming)
-      : await openAIClient.responses.create(body as ResponseCreateParamsNonStreaming, extraBody);
-      
-    !isStream && console.log(`[${agent.name}]: ${response.output_text}`);
+    let isFirstDelta = true;
+
+    response = !isStream
+      ? await openAIClient.responses.create(
+        body as ResponseCreateParamsNonStreaming,
+        extraBody
+      )
+      : await streamResponse(
+        openAIClient,
+        {
+          body: body as ResponseCreateParamsStreaming,
+          extraBody: extraBody,
+          onEvent: (event) => {
+            // Handle streaming events if needed
+            switch (event.type) {
+              case "response.output_text.delta":
+                // Print delta text as it arrives (without newlines to show streaming effect)
+                if (isFirstDelta) {
+                  process.stderr.write(`[${agent.name}]: `);
+                  isFirstDelta = false;
+                }
+                process.stdout.write(event.delta);
+                break;
+              case "response.created":
+              case "response.output_text.done":
+              case "response.completed":
+                // console.log("Response completed.");
+                break;
+            }
+          }
+        }
+      );
+
+    if (!isStream) console.log(`[${agent.name}]: ${response.output_text}`);
+    else console.log(); // To ensure a newline after streaming
     approvalRequestedTools.length = 0; // Clear previous requests
     approvalRequestedTools.push(...response.output.filter(o => o.type === 'mcp_approval_request'));
   }
